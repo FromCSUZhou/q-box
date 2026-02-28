@@ -1,0 +1,12 @@
+# Build artifacts
+QuadrantApp/.build/
+QuadrantApp/*.app
+QuadrantApp/AppIcon.iconset/
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# Task data (personal)
+tasks/
