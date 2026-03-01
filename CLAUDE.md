@@ -110,5 +110,6 @@ pkill -f QuadrantApp; sleep 1 && ./build.sh && open "Q Box.app"
 - 窗口使用 `.hiddenTitleBar` + `.ignoresSafeArea()` + 自定义标题栏，拖拽窗口仅通过顶部 `WindowDragHandle`
 - 任务拖拽: `TaskRowView` 用 `.onDrag` 提供 UUID，`QuadrantPanelView` 用 `.onDrop` 接收
 - 新增 `DailyTasks` 字段必须是 Optional，确保旧 JSON 文件向后兼容
-- `TaskStore` 默认路径硬编码为 `~/Desktop/Work/four-quadrant-work/tasks/`
+- `TaskStore` 默认路径为 `~/Library/Application Support/Q Box/tasks/`（首次运行会自动从旧路径 `~/Desktop/Work/four-quadrant-work/tasks/` 迁移数据）
 - 番茄钟状态不持久化，每次启动重置
+- 手写 JSON 中的 UUID 必须是合法十六进制（`0-9`, `A-F`），**不能包含 G-Z 等字符**，否则 Swift `UUID` 解码会失败导致整个文件无法加载

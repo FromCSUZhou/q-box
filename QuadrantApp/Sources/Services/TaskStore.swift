@@ -39,10 +39,33 @@ class TaskStore: ObservableObject {
     init(tasksDirectory: URL? = nil) {
         self.tasksDirectoryURL = tasksDirectory ?? Self.defaultTasksDirectory()
         ensureDirectoryExists()
+        Self.migrateFromLegacyDirectory(to: tasksDirectoryURL)
         loadTodayTasks()
         if schedule.isEmpty { schedule = Self.defaultSchedule }
         checkPendingMigration()
         startFileWatching()
+    }
+
+    /// One-time migration from old hardcoded path to Application Support
+    private static func migrateFromLegacyDirectory(to newDir: URL) {
+        let homeDir = FileManager.default.homeDirectoryForCurrentUser
+        let legacyDir = homeDir.appendingPathComponent("Desktop/Work/four-quadrant-work/tasks")
+        let fm = FileManager.default
+
+        guard fm.fileExists(atPath: legacyDir.path),
+              legacyDir.standardizedFileURL != newDir.standardizedFileURL else { return }
+
+        guard let files = try? fm.contentsOfDirectory(atPath: legacyDir.path) else { return }
+        let jsonFiles = files.filter { $0.hasSuffix(".json") }
+        guard !jsonFiles.isEmpty else { return }
+
+        for file in jsonFiles {
+            let src = legacyDir.appendingPathComponent(file)
+            let dst = newDir.appendingPathComponent(file)
+            if !fm.fileExists(atPath: dst.path) {
+                try? fm.copyItem(at: src, to: dst)
+            }
+        }
     }
 
     static let defaultSchedule: [TimeBlock] = [
@@ -59,9 +82,9 @@ class TaskStore: ObservableObject {
     ]
 
     static func defaultTasksDirectory() -> URL {
-        let homeDir = FileManager.default.homeDirectoryForCurrentUser
-        return homeDir
-            .appendingPathComponent("Desktop/Work/four-quadrant-work/tasks")
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        return appSupport
+            .appendingPathComponent("Q Box/tasks")
     }
 
     // MARK: - File Operations
