@@ -44,7 +44,7 @@ four-quadrant-work/
 │   └── YYYY-MM-DD.json
 └── .claude/
     └── skills/
-        └── plan.md             # /plan 交互式每日规划 skill
+        └── plan.md             # /daily 交互式每日规划 skill
 ```
 
 ## 数据格式
@@ -102,8 +102,8 @@ pkill -f QuadrantApp; sleep 1 && ./build.sh && open "Q Box.app"
 - **番茄钟**: 25分钟工作/5分钟休息/4轮后15分钟长休息，系统通知提醒
 - **菜单栏**: 快速添加、进度概览、番茄钟面板、收工总结
 - **历史迁移**: 自动检测近 3 天未完成任务，提示迁移
-- **文件同步**: 2 秒轮询监听 JSON 变化，/plan skill 写入后 app 自动刷新
-- **/plan skill**: 交互式每日规划，分析 DDL 和重要性，生成象限分配 + 时间段安排
+- **文件同步**: 2 秒轮询监听 JSON 变化，/daily skill 写入后 app 自动刷新
+- **/daily skill**: 交互式每日规划，分析 DDL 和重要性，生成象限分配 + 时间段安排
 
 ## 开发注意事项
 
