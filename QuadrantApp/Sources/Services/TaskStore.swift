@@ -10,6 +10,7 @@ class TaskStore: ObservableObject {
     private let tasksDirectoryURL: URL
     private var fileWatchTimer: Timer?
     private var lastFileModification: Date?
+    private var lastKnownDateString: String?
 
     private let dateFormatter: DateFormatter = {
         let df = DateFormatter()
@@ -174,7 +175,18 @@ class TaskStore: ObservableObject {
         let quadrantTasks = tasksFor(quadrant: quadrant)
         let incomplete = quadrantTasks
             .filter { !$0.completed }
-            .sorted { $0.createdAt < $1.createdAt }
+            .sorted {
+                switch ($0.deadline, $1.deadline) {
+                case let (d0?, d1?):
+                    return d0 < d1
+                case (_?, nil):
+                    return false
+                case (nil, _?):
+                    return true
+                default:
+                    return $0.createdAt < $1.createdAt
+                }
+            }
         let completed = quadrantTasks
             .filter { $0.completed }
             .sorted { ($0.completedAt ?? $0.createdAt) > ($1.completedAt ?? $1.createdAt) }
@@ -185,25 +197,39 @@ class TaskStore: ObservableObject {
 
     func checkPendingMigration() {
         let calendar = Calendar.current
-        // Check up to 3 days back for incomplete tasks
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        // First pass: collect completed task titles from today and all recent days
+        var completedTitles = Set(tasks.filter(\.completed).map(\.title))
         for dayOffset in 1...3 {
             guard let pastDate = calendar.date(byAdding: .day, value: -dayOffset, to: Date()) else { continue }
             let pastDateString = dateFormatter.string(from: pastDate)
             let pastFileURL = tasksDirectoryURL.appendingPathComponent("\(pastDateString).json")
 
             guard FileManager.default.fileExists(atPath: pastFileURL.path),
-                  let data = try? Data(contentsOf: pastFileURL) else { continue }
+                  let data = try? Data(contentsOf: pastFileURL),
+                  let daily = try? decoder.decode(DailyTasks.self, from: data) else { continue }
 
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-
-            if let daily = try? decoder.decode(DailyTasks.self, from: data) {
-                let incomplete = daily.tasks.filter { !$0.completed }
-                // Avoid duplicates: only add tasks whose titles aren't already in today's list or pending list
-                let existingTitles = Set(tasks.map(\.title) + pendingMigrationTasks.map(\.title))
-                let newTasks = incomplete.filter { !existingTitles.contains($0.title) }
-                pendingMigrationTasks.append(contentsOf: newTasks)
+            for task in daily.tasks where task.completed {
+                completedTitles.insert(task.title)
             }
+        }
+
+        // Second pass: collect incomplete tasks, skipping those completed on any day
+        for dayOffset in 1...3 {
+            guard let pastDate = calendar.date(byAdding: .day, value: -dayOffset, to: Date()) else { continue }
+            let pastDateString = dateFormatter.string(from: pastDate)
+            let pastFileURL = tasksDirectoryURL.appendingPathComponent("\(pastDateString).json")
+
+            guard FileManager.default.fileExists(atPath: pastFileURL.path),
+                  let data = try? Data(contentsOf: pastFileURL),
+                  let daily = try? decoder.decode(DailyTasks.self, from: data) else { continue }
+
+            let incomplete = daily.tasks.filter { !$0.completed }
+            let existingTitles = Set(tasks.map(\.title) + pendingMigrationTasks.map(\.title))
+            let newTasks = incomplete.filter { !existingTitles.contains($0.title) && !completedTitles.contains($0.title) }
+            pendingMigrationTasks.append(contentsOf: newTasks)
         }
     }
 
@@ -241,15 +267,32 @@ class TaskStore: ObservableObject {
     // MARK: - File Watching
 
     private func startFileWatching() {
+        lastKnownDateString = todayString
         lastFileModification = try? FileManager.default
             .attributesOfItem(atPath: todayFileURL.path)[.modificationDate] as? Date
 
         fileWatchTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-            self?.checkFileChanges()
+            self?.checkDateChangeAndFileChanges()
         }
     }
 
-    private func checkFileChanges() {
+    private func checkDateChangeAndFileChanges() {
+        let currentDateString = todayString
+        // Detect day change: reload today's (empty) tasks and re-check migration
+        if currentDateString != lastKnownDateString {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.lastKnownDateString = currentDateString
+                self.loadTodayTasks()
+                self.pendingMigrationTasks.removeAll()
+                self.checkPendingMigration()
+                self.lastFileModification = try? FileManager.default
+                    .attributesOfItem(atPath: self.todayFileURL.path)[.modificationDate] as? Date
+            }
+            return
+        }
+
+        // Normal file change detection
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: todayFileURL.path),
               let modDate = attrs[.modificationDate] as? Date else { return }
 

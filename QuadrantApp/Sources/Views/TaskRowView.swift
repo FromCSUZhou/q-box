@@ -7,6 +7,8 @@ struct TaskRowView: View {
     @State private var isEditing = false
     @State private var editText: String = ""
     @State private var isHovering = false
+    @State private var isEditingDeadline = false
+    @State private var editDeadline: Date = Date()
 
     var body: some View {
         HStack(spacing: 8) {
@@ -64,11 +66,40 @@ struct TaskRowView: View {
             NSItemProvider(object: task.id.uuidString as NSString)
         }
         .contextMenu { contextMenuContent }
+        .popover(isPresented: $isEditingDeadline, arrowEdge: .bottom) {
+            VStack(spacing: 8) {
+                Text("截止时间")
+                    .font(.system(size: 12, weight: .medium))
+                DatePicker("", selection: $editDeadline, displayedComponents: [.date, .hourAndMinute])
+                    .labelsHidden()
+                    .datePickerStyle(.graphical)
+                HStack(spacing: 8) {
+                    Button("取消") { isEditingDeadline = false }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                    Button("确定") { submitDeadline() }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                }
+            }
+            .padding(12)
+        }
     }
 
     @ViewBuilder
     private var contextMenuContent: some View {
-        Button("编辑") { startEditing() }
+        Button("编辑标题") { startEditing() }
+
+        if task.deadline != nil {
+            Button("修改截止时间") { startEditingDeadline() }
+            Button("清除截止时间") {
+                var updated = task
+                updated.deadline = nil
+                store.updateTask(updated)
+            }
+        } else {
+            Button("设置截止时间") { startEditingDeadline() }
+        }
 
         Menu("移动到...") {
             ForEach(Quadrant.allCases) { q in
@@ -136,5 +167,17 @@ struct TaskRowView: View {
 
     private func cancelEdit() {
         isEditing = false
+    }
+
+    private func startEditingDeadline() {
+        editDeadline = task.deadline ?? Date()
+        isEditingDeadline = true
+    }
+
+    private func submitDeadline() {
+        var updated = task
+        updated.deadline = editDeadline
+        store.updateTask(updated)
+        isEditingDeadline = false
     }
 }
